@@ -76,7 +76,7 @@ profile 使用 `CODEX_SWITCH_API_KEY`，GPT profile 使用共享工作区中的 
 session、记忆、缓存和日志会留在项目工作区内。这就是本工具将普通 Codex
 部署为项目级隔离工作区模式的方式。
 
-原生 `~/.codex/*.config.toml` profile 会按需链接到项目工作区，因此可以直接
+原生 `~/.codex/*.config.toml` profile 会自动链接到项目工作区，因此可以直接
 使用 `cproj --profile <名称>`。本工具自身使用 `codex-switch-gpt` 和
 `codex-switch-api` 作为 profile 名称，不会覆盖用户已有的 `gpt` 或 `api`
 profile。

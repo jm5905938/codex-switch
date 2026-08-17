@@ -22,4 +22,5 @@ fi
 
 print "Installed codex-switch into $install_dir"
 print "Run: source $shell_rc"
-print 'Then run: codex-switch setup && codex-switch api-key && codex-gpt login'
+print 'For ChatGPT: codex-gpt login'
+print 'For a third-party API: codex-switch setup && codex-switch api-key'

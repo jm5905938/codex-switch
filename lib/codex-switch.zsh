@@ -11,8 +11,9 @@ typeset -g CODEX_SWITCH_WORKSPACES_ROOT="${CODEX_SWITCH_WORKSPACES_ROOT:-$HOME/.
 typeset -g CODEX_SWITCH_ENV_FILE="${CODEX_SWITCH_ENV_FILE:-$CODEX_SWITCH_HOME/api.env}"
 typeset -g CODEX_SWITCH_API_CONFIG="${CODEX_SWITCH_API_CONFIG:-$CODEX_SWITCH_HOME/api-base-url}"
 typeset -g CODEX_SWITCH_BASE_CONFIG="${CODEX_SWITCH_BASE_CONFIG:-$HOME/.codex/config.toml}"
-typeset -gr CODEX_SWITCH_GPT_PROFILE='codex-switch-gpt'
-typeset -gr CODEX_SWITCH_API_PROFILE='codex-switch-api'
+typeset -g CODEX_SWITCH_GPT_PROFILE='codex-switch-gpt'
+typeset -g CODEX_SWITCH_API_PROFILE='codex-switch-api'
+typeset -g CODEX_SWITCH_FALLBACK_MARKER='# Managed by codex-switch: fallback config'
 
 if [[ -f "$CODEX_SWITCH_ENV_FILE" ]]; then
   source "$CODEX_SWITCH_ENV_FILE"
@@ -56,14 +57,21 @@ _codex_switch_workspace_dir() {
 _codex_switch_write_base_config() {
   emulate -L zsh
 
-  local workspace_dir="$1"
+  local workspace_dir="$1" config_path
+  config_path="$workspace_dir/config.toml"
   mkdir -p -- "$workspace_dir" || return 1
 
-  if [[ ! -e "$workspace_dir/config.toml" && ! -L "$workspace_dir/config.toml" ]]; then
-    if [[ -f "$CODEX_SWITCH_BASE_CONFIG" ]]; then
-      ln -s -- "$CODEX_SWITCH_BASE_CONFIG" "$workspace_dir/config.toml" || return 1
-    else
-      cat > "$workspace_dir/config.toml" <<'EOF'
+  if [[ -f "$CODEX_SWITCH_BASE_CONFIG" ]]; then
+    if [[ -f "$config_path" && ! -L "$config_path" ]] && grep -Fqx "$CODEX_SWITCH_FALLBACK_MARKER" "$config_path"; then
+      rm -- "$config_path" || return 1
+    fi
+
+    if [[ ! -e "$config_path" && ! -L "$config_path" ]]; then
+      ln -s -- "$CODEX_SWITCH_BASE_CONFIG" "$config_path" || return 1
+    fi
+  elif [[ ! -e "$config_path" && ! -L "$config_path" ]]; then
+    cat > "$config_path" <<EOF
+$CODEX_SWITCH_FALLBACK_MARKER
 [features]
 memories = true
 
@@ -71,7 +79,6 @@ memories = true
 use_memories = true
 generate_memories = true
 EOF
-    fi
   fi
 
   _codex_switch_link_native_profiles "$workspace_dir"
@@ -84,6 +91,8 @@ _codex_switch_link_native_profiles() {
   native_dir="${CODEX_SWITCH_BASE_CONFIG:h}"
 
   for profile_file in "$native_dir"/*.config.toml(N); do
+    [[ "${profile_file:t}" == "${CODEX_SWITCH_GPT_PROFILE}.config.toml" ]] && continue
+    [[ "${profile_file:t}" == "${CODEX_SWITCH_API_PROFILE}.config.toml" ]] && continue
     destination="$workspace_dir/${profile_file:t}"
     [[ -e "$destination" || -L "$destination" ]] || ln -s -- "$profile_file" "$destination" || return 1
   done
@@ -92,11 +101,13 @@ _codex_switch_link_native_profiles() {
 _codex_switch_write_gpt_profile() {
   emulate -L zsh
 
-  local workspace_dir="$1"
+  local workspace_dir="$1" profile_path
 
   _codex_switch_write_base_config "$workspace_dir" || return 1
 
-  cat > "$workspace_dir/${CODEX_SWITCH_GPT_PROFILE}.config.toml" <<'EOF'
+  profile_path="$workspace_dir/${CODEX_SWITCH_GPT_PROFILE}.config.toml"
+  [[ ! -L "$profile_path" ]] || rm -- "$profile_path" || return 1
+  cat > "$profile_path" <<'EOF'
 # Official OpenAI provider. Authenticate with `codex-gpt login`.
 model_provider = "openai"
 EOF
@@ -105,13 +116,15 @@ EOF
 _codex_switch_write_api_profile() {
   emulate -L zsh
 
-  local base_url="$1" workspace_dir="$2"
+  local base_url="$1" workspace_dir="$2" profile_path
   local quoted_url
   quoted_url="$(_codex_switch_toml_string "$base_url")"
 
   _codex_switch_write_base_config "$workspace_dir" || return 1
 
-  cat > "$workspace_dir/${CODEX_SWITCH_API_PROFILE}.config.toml" <<EOF
+  profile_path="$workspace_dir/${CODEX_SWITCH_API_PROFILE}.config.toml"
+  [[ ! -L "$profile_path" ]] || rm -- "$profile_path" || return 1
+  cat > "$profile_path" <<EOF
 # Third-party Responses API provider. The key comes from CODEX_SWITCH_API_KEY.
 model_provider = "thirdparty"
 
