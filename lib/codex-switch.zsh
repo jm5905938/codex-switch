@@ -61,6 +61,12 @@ _codex_switch_write_base_config() {
   config_path="$workspace_dir/config.toml"
   mkdir -p -- "$workspace_dir" || return 1
 
+  # A deleted global config leaves a broken symlink behind. Treat that as an
+  # unavailable workspace config so it can be replaced with a fallback.
+  if [[ -L "$config_path" && ! -e "$config_path" ]]; then
+    rm -- "$config_path" || return 1
+  fi
+
   if [[ -f "$CODEX_SWITCH_BASE_CONFIG" ]]; then
     if [[ -f "$config_path" && ! -L "$config_path" ]] && grep -Fqx "$CODEX_SWITCH_FALLBACK_MARKER" "$config_path"; then
       rm -- "$config_path" || return 1
