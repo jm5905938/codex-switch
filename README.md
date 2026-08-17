@@ -1,22 +1,30 @@
 # codex-switch
 
-`codex-switch` 是一个仅供个人自用的 Zsh/Linux 工具，用于让官方 ChatGPT
-登录与第三方 Codex provider 共用同一份、按 Git 仓库划分的 `CODEX_HOME`。
-切换 provider 时可以保留项目记忆、session 历史和恢复目标。
+`codex-switch` 是一个仅供个人自用的 Zsh/Linux 工具。它自行实现按 Git
+仓库划分的 `CODEX_HOME`，并让官方 ChatGPT 登录与第三方 Codex provider
+共用该项目工作区；切换 provider 时可以保留项目记忆、session 历史和恢复
+目标。
 
 本项目与 OpenAI 无关联，也不替代 Codex 的官方配置文档。
+
+> 原生 Codex 默认使用单一的 `~/.codex`。按仓库创建工作区是本工具提供的
+> 自定义 shell 行为，不是 Codex 内置功能。
 
 ## 命令
 
 | 命令 | Provider | 工作区 |
 | --- | --- | --- |
+| `cproj` | 原生 Codex 配置或手动传入的 profile | 当前项目的隔离工作区 |
+| `cproj-api` | 第三方 Responses API | 当前项目的共享工作区 |
+| `cproj-gpt` | 官方 OpenAI / ChatGPT | 当前项目的共享工作区 |
 | `codex` | 第三方 Responses API | 当前项目的共享工作区 |
 | `codex-gpt` | 官方 OpenAI / ChatGPT | 当前项目的共享工作区 |
 | `codex-g` | 原生 Codex | 不修改全局 `CODEX_HOME` |
 
-`codex` 和 `codex-gpt` 针对当前 Git 仓库使用同一个工作区。`codex-gpt
-resume` 会自动附加 `--all`，因此切换目录后仍能看到通过两种 provider
-创建的 session。
+`cproj` 是项目级工作区隔离的基础入口。`codex` 与 `codex-gpt` 分别是
+`cproj-api` 和 `cproj-gpt` 的快捷入口。它们针对当前 Git 仓库使用同一个
+工作区。`codex-gpt resume` 会自动附加 `--all`，因此切换目录后仍能看到
+通过两种 provider 创建的 session。
 
 ## 安装
 
@@ -52,7 +60,7 @@ codex-gpt resume
 
 ## 工作区布局
 
-每个 Git 仓库对应一个目录：
+本工具会为每个 Git 仓库自行创建一个目录：
 
 ```text
 ~/.codex-switch/workspaces/<仓库名>-<哈希>/
@@ -61,6 +69,11 @@ codex-gpt resume
 该目录保存 `auth.json`、session、记忆数据库和两个 provider profile。API
 profile 使用 `CODEX_SWITCH_API_KEY`，GPT profile 使用共享工作区中的 ChatGPT
 登录状态。API profile 不需要执行 `codex login`。
+
+首次进入项目时，`cproj` 会将工作区的 `config.toml` 链接到原生
+`~/.codex/config.toml`，因此 MCP、权限、模型等基础配置可以沿用；但认证、
+session、记忆、缓存和日志会留在项目工作区内。这就是本工具将普通 Codex
+部署为项目级隔离工作区模式的方式。
 
 ## 状态与卸载
 

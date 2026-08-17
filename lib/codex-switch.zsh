@@ -10,6 +10,7 @@ typeset -g CODEX_SWITCH_HOME="${CODEX_SWITCH_HOME:-$HOME/.config/codex-switch}"
 typeset -g CODEX_SWITCH_WORKSPACES_ROOT="${CODEX_SWITCH_WORKSPACES_ROOT:-$HOME/.codex-switch/workspaces}"
 typeset -g CODEX_SWITCH_ENV_FILE="${CODEX_SWITCH_ENV_FILE:-$CODEX_SWITCH_HOME/api.env}"
 typeset -g CODEX_SWITCH_API_CONFIG="${CODEX_SWITCH_API_CONFIG:-$CODEX_SWITCH_HOME/api-base-url}"
+typeset -g CODEX_SWITCH_BASE_CONFIG="${CODEX_SWITCH_BASE_CONFIG:-$HOME/.codex/config.toml}"
 
 if [[ -f "$CODEX_SWITCH_ENV_FILE" ]]; then
   source "$CODEX_SWITCH_ENV_FILE"
@@ -50,17 +51,22 @@ _codex_switch_workspace_dir() {
   print -r -- "$CODEX_SWITCH_WORKSPACES_ROOT/${project_name}-${short_hash}"
 }
 
-_codex_switch_write_profiles() {
+_codex_switch_write_base_config() {
   emulate -L zsh
 
-  local base_url="$1" workspace_dir="$2"
-  local quoted_url
-  quoted_url="$(_codex_switch_toml_string "$base_url")"
-
+  local workspace_dir="$1"
   mkdir -p -- "$workspace_dir" || return 1
 
-  if [[ ! -f "$workspace_dir/config.toml" ]]; then
-    cat > "$workspace_dir/config.toml" <<'EOF'
+  if [[ -e "$workspace_dir/config.toml" || -L "$workspace_dir/config.toml" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$CODEX_SWITCH_BASE_CONFIG" ]]; then
+    ln -s -- "$CODEX_SWITCH_BASE_CONFIG" "$workspace_dir/config.toml" || return 1
+    return 0
+  fi
+
+  cat > "$workspace_dir/config.toml" <<'EOF'
 [features]
 memories = true
 
@@ -68,7 +74,16 @@ memories = true
 use_memories = true
 generate_memories = true
 EOF
-  fi
+}
+
+_codex_switch_write_profiles() {
+  emulate -L zsh
+
+  local base_url="$1" workspace_dir="$2"
+  local quoted_url
+  quoted_url="$(_codex_switch_toml_string "$base_url")"
+
+  _codex_switch_write_base_config "$workspace_dir" || return 1
 
   cat > "$workspace_dir/gpt.config.toml" <<'EOF'
 # Official OpenAI provider. Authenticate with `codex-gpt login`.
@@ -106,6 +121,18 @@ _codex_switch_prepare_workspace() {
   print -r -- "$workspace_dir"
 }
 
+# Run native Codex in a repository-local CODEX_HOME. It accepts ordinary Codex
+# options, including a manually selected --profile.
+cproj() {
+  emulate -L zsh
+
+  local workspace_dir
+  workspace_dir="$(_codex_switch_workspace_dir)" || return 1
+  _codex_switch_write_base_config "$workspace_dir" || return 1
+  print -u2 "codex workspace: $workspace_dir"
+  CODEX_HOME="$workspace_dir" command codex "$@"
+}
+
 _codex_switch_run() {
   emulate -L zsh
 
@@ -136,12 +163,20 @@ _codex_switch_run() {
   esac
 }
 
-codex() {
+cproj-api() {
   _codex_switch_run api "$@"
 }
 
-codex-gpt() {
+cproj-gpt() {
   _codex_switch_run gpt "$@"
+}
+
+codex() {
+  cproj-api "$@"
+}
+
+codex-gpt() {
+  cproj-gpt "$@"
 }
 
 codex-g() {
