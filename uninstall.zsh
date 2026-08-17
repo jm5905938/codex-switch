@@ -7,9 +7,16 @@ start_marker='# >>> codex-switch >>>'
 end_marker='# <<< codex-switch <<<'
 
 if [[ -f "$shell_rc" ]]; then
-  temporary_file="$(mktemp)"
-  sed "/$start_marker/,/$end_marker/d" "$shell_rc" > "$temporary_file"
-  mv "$temporary_file" "$shell_rc"
+  target_rc="$(readlink -f -- "$shell_rc")" || {
+    print -u2 "codex-switch: cannot resolve $shell_rc"
+    exit 1
+  }
+  temporary_file="$(mktemp "${target_rc}.codex-switch.XXXXXX")"
+  trap 'rm -f -- "$temporary_file"' EXIT
+  sed "/$start_marker/,/$end_marker/d" "$target_rc" > "$temporary_file"
+  cat "$temporary_file" > "$target_rc"
+  rm -f -- "$temporary_file"
+  trap - EXIT
 fi
 
 print "Shell hook removed from $shell_rc"

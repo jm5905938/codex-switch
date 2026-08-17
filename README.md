@@ -29,7 +29,7 @@
 ## 安装
 
 ```zsh
-git clone https://github.com/OWNER/codex-switch.git
+git clone https://github.com/jm5905938/codex-switch.git
 cd codex-switch
 ./install.zsh
 source ~/.zshrc
@@ -48,7 +48,8 @@ codex-gpt login
 
 `setup` 会询问第三方 Responses API 的基础地址。`api-key` 将 key 保存到
 `~/.config/codex-switch/api.env`，权限为 `0600`，新开的 Zsh shell 会自动
-加载它。API key 不会写入 Codex 配置文件。
+加载它。API key 不会写入 Codex 配置文件。`codex-gpt` 不依赖第三方 endpoint
+或 API key，因此可以在执行 `setup` 前单独登录和使用。
 
 配置完成后：
 
@@ -74,6 +75,11 @@ profile 使用 `CODEX_SWITCH_API_KEY`，GPT profile 使用共享工作区中的 
 `~/.codex/config.toml`，因此 MCP、权限、模型等基础配置可以沿用；但认证、
 session、记忆、缓存和日志会留在项目工作区内。这就是本工具将普通 Codex
 部署为项目级隔离工作区模式的方式。
+
+原生 `~/.codex/*.config.toml` profile 会按需链接到项目工作区，因此可以直接
+使用 `cproj --profile <名称>`。本工具自身使用 `codex-switch-gpt` 和
+`codex-switch-api` 作为 profile 名称，不会覆盖用户已有的 `gpt` 或 `api`
+profile。
 
 ## 状态与卸载
 
@@ -103,3 +109,8 @@ codex-switch status
   通过不可信 provider 恢复敏感 session。
 - `codex-g` 会绕过本工具，保留原生 Codex 行为。
 
+## 已知限制
+
+工作区 ID 目前包含仓库的绝对路径。移动或重新克隆仓库会创建一个新的工作区，
+旧 session 和记忆不会自动迁移。后续版本会提供工作区列表与迁移命令；在此之前，
+请手动保留旧工作区目录。

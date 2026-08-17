@@ -11,6 +11,8 @@ typeset -g CODEX_SWITCH_WORKSPACES_ROOT="${CODEX_SWITCH_WORKSPACES_ROOT:-$HOME/.
 typeset -g CODEX_SWITCH_ENV_FILE="${CODEX_SWITCH_ENV_FILE:-$CODEX_SWITCH_HOME/api.env}"
 typeset -g CODEX_SWITCH_API_CONFIG="${CODEX_SWITCH_API_CONFIG:-$CODEX_SWITCH_HOME/api-base-url}"
 typeset -g CODEX_SWITCH_BASE_CONFIG="${CODEX_SWITCH_BASE_CONFIG:-$HOME/.codex/config.toml}"
+typeset -gr CODEX_SWITCH_GPT_PROFILE='codex-switch-gpt'
+typeset -gr CODEX_SWITCH_API_PROFILE='codex-switch-api'
 
 if [[ -f "$CODEX_SWITCH_ENV_FILE" ]]; then
   source "$CODEX_SWITCH_ENV_FILE"
@@ -57,16 +59,11 @@ _codex_switch_write_base_config() {
   local workspace_dir="$1"
   mkdir -p -- "$workspace_dir" || return 1
 
-  if [[ -e "$workspace_dir/config.toml" || -L "$workspace_dir/config.toml" ]]; then
-    return 0
-  fi
-
-  if [[ -f "$CODEX_SWITCH_BASE_CONFIG" ]]; then
-    ln -s -- "$CODEX_SWITCH_BASE_CONFIG" "$workspace_dir/config.toml" || return 1
-    return 0
-  fi
-
-  cat > "$workspace_dir/config.toml" <<'EOF'
+  if [[ ! -e "$workspace_dir/config.toml" && ! -L "$workspace_dir/config.toml" ]]; then
+    if [[ -f "$CODEX_SWITCH_BASE_CONFIG" ]]; then
+      ln -s -- "$CODEX_SWITCH_BASE_CONFIG" "$workspace_dir/config.toml" || return 1
+    else
+      cat > "$workspace_dir/config.toml" <<'EOF'
 [features]
 memories = true
 
@@ -74,9 +71,38 @@ memories = true
 use_memories = true
 generate_memories = true
 EOF
+    fi
+  fi
+
+  _codex_switch_link_native_profiles "$workspace_dir"
 }
 
-_codex_switch_write_profiles() {
+_codex_switch_link_native_profiles() {
+  emulate -L zsh
+
+  local workspace_dir="$1" native_dir profile_file destination
+  native_dir="${CODEX_SWITCH_BASE_CONFIG:h}"
+
+  for profile_file in "$native_dir"/*.config.toml(N); do
+    destination="$workspace_dir/${profile_file:t}"
+    [[ -e "$destination" || -L "$destination" ]] || ln -s -- "$profile_file" "$destination" || return 1
+  done
+}
+
+_codex_switch_write_gpt_profile() {
+  emulate -L zsh
+
+  local workspace_dir="$1"
+
+  _codex_switch_write_base_config "$workspace_dir" || return 1
+
+  cat > "$workspace_dir/${CODEX_SWITCH_GPT_PROFILE}.config.toml" <<'EOF'
+# Official OpenAI provider. Authenticate with `codex-gpt login`.
+model_provider = "openai"
+EOF
+}
+
+_codex_switch_write_api_profile() {
   emulate -L zsh
 
   local base_url="$1" workspace_dir="$2"
@@ -85,12 +111,7 @@ _codex_switch_write_profiles() {
 
   _codex_switch_write_base_config "$workspace_dir" || return 1
 
-  cat > "$workspace_dir/gpt.config.toml" <<'EOF'
-# Official OpenAI provider. Authenticate with `codex-gpt login`.
-model_provider = "openai"
-EOF
-
-  cat > "$workspace_dir/api.config.toml" <<EOF
+  cat > "$workspace_dir/${CODEX_SWITCH_API_PROFILE}.config.toml" <<EOF
 # Third-party Responses API provider. The key comes from CODEX_SWITCH_API_KEY.
 model_provider = "thirdparty"
 
@@ -106,18 +127,35 @@ EOF
 _codex_switch_prepare_workspace() {
   emulate -L zsh
 
-  local workspace_dir base_url
+  local profile="$1" workspace_dir base_url
   workspace_dir="$(_codex_switch_workspace_dir)" || return 1
-  [[ -f "$CODEX_SWITCH_API_CONFIG" ]] || {
-    print -u2 'codex-switch: API endpoint is not configured; run `codex-switch setup`.'
-    return 1
-  }
-  base_url="$(<"$CODEX_SWITCH_API_CONFIG")"
-  [[ -n "$base_url" ]] || {
-    print -u2 'codex-switch: API endpoint is empty; run `codex-switch setup`.'
-    return 1
-  }
-  _codex_switch_write_profiles "$base_url" "$workspace_dir" || return 1
+
+  case "$profile" in
+    "$CODEX_SWITCH_GPT_PROFILE")
+      _codex_switch_write_gpt_profile "$workspace_dir" || return 1
+      ;;
+    "$CODEX_SWITCH_API_PROFILE")
+      [[ -f "$CODEX_SWITCH_API_CONFIG" ]] || {
+        print -u2 'codex-switch: API endpoint is not configured; run `codex-switch setup`.'
+        return 1
+      }
+      [[ -n ${CODEX_SWITCH_API_KEY-} ]] || {
+        print -u2 'codex-switch: API key is not configured; run `codex-switch api-key`.'
+        return 1
+      }
+      base_url="$(<"$CODEX_SWITCH_API_CONFIG")"
+      [[ -n "$base_url" ]] || {
+        print -u2 'codex-switch: API endpoint is empty; run `codex-switch setup`.'
+        return 1
+      }
+      _codex_switch_write_api_profile "$base_url" "$workspace_dir" || return 1
+      ;;
+    *)
+      print -u2 "codex-switch: unknown provider profile: $profile"
+      return 2
+      ;;
+  esac
+
   print -r -- "$workspace_dir"
 }
 
@@ -139,7 +177,7 @@ _codex_switch_run() {
   local profile="$1"
   shift
   local workspace_dir
-  workspace_dir="$(_codex_switch_prepare_workspace)" || return 1
+  workspace_dir="$(_codex_switch_prepare_workspace "$profile")" || return 1
 
   case "${1-}" in
     login|logout|doctor|update|completion|features|help)
@@ -164,11 +202,11 @@ _codex_switch_run() {
 }
 
 cproj-api() {
-  _codex_switch_run api "$@"
+  _codex_switch_run "$CODEX_SWITCH_API_PROFILE" "$@"
 }
 
 cproj-gpt() {
-  _codex_switch_run gpt "$@"
+  _codex_switch_run "$CODEX_SWITCH_GPT_PROFILE" "$@"
 }
 
 codex() {
