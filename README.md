@@ -96,7 +96,6 @@ codex-switch status
 
 - 本项目仅供个人自用。使用前请自行审查脚本，并理解第三方 provider 的
   数据处理与隐私政策。
-- 不要提交 `api.env`、API key，或私有网关地址。
 - 第三方 provider 会接收提示词、仓库上下文和已启用工具的输出；只使用你
   信任的 provider。
 - 通过 `codex` 恢复 ChatGPT session 时，为了跨 provider 继续对话，Codex
@@ -104,8 +103,3 @@ codex-switch status
   通过不可信 provider 恢复敏感 session。
 - `codex-g` 会绕过本工具，保留原生 Codex 行为。
 
-## 开发
-
-```zsh
-zsh tests/smoke.zsh
-```
